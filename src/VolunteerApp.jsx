@@ -13,11 +13,10 @@ export default function VolunteerApp() {
       const managers = JSON.parse(localStorage.getItem("managers")) || [];
       const hasDefault = managers.some(m => m.email === "manager@example.com");
       if (!hasDefault) {
-        managers.push({ email: "manager@example.com", password: "123456" });
         localStorage.setItem("managers", JSON.stringify(managers));
       }
     } catch (e) {
-      localStorage.setItem("managers", JSON.stringify([{ email: "manager@example.com", password: "123456" }]));
+      localStorage.setItem("managers", JSON.stringify([{ email: "manager@example.com", password: "123456" , full_name: "manager"}]));
     }
   }, []);
 
@@ -48,27 +47,47 @@ export default function VolunteerApp() {
 
   // Authentication helpers (using DOM inputs for simplicity)
   const doLogin = () => {
-    const email = document.getElementById("loginEmail").value.trim();
+    const email_or_username = document.getElementById("loginEmail").value.trim();
     const password = document.getElementById("loginPassword").value.trim();
     const type = document.getElementById("loginType").value;
 
     if (type === "volunteer") {
       const volunteers = JSON.parse(localStorage.getItem("volunteers")) || [];
-      const found = volunteers.find(v => v.email === email && v.password === password);
-      if (!found) return alert("Invalid volunteer credentials");
-      setVolunteerType(found.type || "student");
-      setRole("volunteer");
-      setScreen("volunteer");
-      return;
+      const found_email = volunteers.find(v => v.email === email_or_username && v.password === password);
+      const found_username = volunteers.find(v => v.name === email_or_username && v.password === password);
+      if (found_email){
+        setVolunteerType(found_email.type || "student");
+        setRole("volunteer");
+        setScreen("volunteer");
+        return;
+      }
+      else if (found_username){
+        setVolunteerType(found_username.type || "student");
+        setRole("volunteer");
+        setScreen("volunteer");
+        return;
+      }
+    
+      alert("Invalid volunteer credentials");
     }
 
     if (type === "manager") {
       const managers = JSON.parse(localStorage.getItem("managers")) || [];
-      const found = managers.find(m => m.email === email && m.password === password);
-      if (!found) return alert("Invalid manager credentials");
-      setRole("manager");
-      setScreen("manager");
-      return;
+      const found_email = managers.find(m => m.email === email_or_username && m.password === password);
+      const found_username = managers.find(m => m.name === email_or_username && m.password === password);
+      if (found_email){
+        setVolunteerType(found_email.type || "manager");
+        setRole("manager");
+        setScreen("manager");
+        return;
+      }
+      else if (found_username){
+        setVolunteerType(found_username.type || "manager");
+        setRole("manager");
+        setScreen("manager");
+        return;
+      }
+      alert("Invalid manager credentials");
     }
   };
 
@@ -81,7 +100,8 @@ export default function VolunteerApp() {
     if (!name || !email || !password) return alert("Please fill all volunteer fields");
 
     const volunteers = JSON.parse(localStorage.getItem("volunteers")) || [];
-    if (volunteers.some(v => v.email === email)) return alert("Volunteer with that email already exists");
+    if (volunteers.some(v => (v.email === email))) return alert("Volunteer with that email already exists");
+    if (volunteers.some(v => (v.name === name))) return alert("Volunteer with that name already exists");
 
     volunteers.push({ name, email, password, type });
     localStorage.setItem("volunteers", JSON.stringify(volunteers));
@@ -97,16 +117,19 @@ export default function VolunteerApp() {
   const signupManager = () => {
     const email = document.getElementById("msEmail").value.trim();
     const password = document.getElementById("msPassword").value.trim();
-    if (!email || !password) return alert("Please fill all manager fields");
+    const name = document.getElementById("msFullName").value.trim();
+    if (!email || !password || !name) return alert("Please fill all manager fields");
 
     const managers = JSON.parse(localStorage.getItem("managers")) || [];
     if (managers.some(m => m.email === email)) return alert("Manager with that email already exists");
+    if (managers.some(m => m.name === name)) return alert("Manager with that full name already exists");
 
-    managers.push({ email, password });
+    managers.push({ email, password, name});
     localStorage.setItem("managers", JSON.stringify(managers));
     alert("Manager account created. You can now log in.");
     document.getElementById("msEmail").value = "";
     document.getElementById("msPassword").value = "";
+    document.getElementById("msFullName").value = "";
   };
 
   const logout = () => {
@@ -165,7 +188,7 @@ export default function VolunteerApp() {
             <option value="manager">Event Manager</option>
           </select>
 
-          <input id="loginEmail" className="p-2 border rounded w-full mb-2" placeholder="Email" />
+          <input id="loginEmail" className="p-2 border rounded w-full mb-2" placeholder="Email/Username" />
           <input id="loginPassword" type="password" className="p-2 border rounded w-full mb-4" placeholder="Password" />
 
           <button onClick={doLogin} className="bg-blue-600 text-white w-full py-2 rounded-xl">Login</button>
@@ -187,8 +210,8 @@ export default function VolunteerApp() {
         </div>
 
         <div className="bg-white p-6 rounded-2xl shadow w-full max-w-sm">
-          <h2 className="text-xl font-bold mb-4 text-center">Manager Signup</h2>
-
+            <h2 className="text-xl font-bold mb-4 text-center">Manager Signup</h2>
+           <input id="msFullName" className="p-2 border rounded w-full mb-2" placeholder="Full name" />
           <input id="msEmail" className="p-2 border rounded w-full mb-2" placeholder="Email" />
           <input id="msPassword" type="password" className="p-2 border rounded w-full mb-4" placeholder="Password" />
           <button onClick={signupManager} className="bg-purple-600 text-white w-full py-2 rounded-xl">Create Manager</button>
