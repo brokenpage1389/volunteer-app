@@ -16,12 +16,24 @@ export default function VolunteerApp() {
   useEffect(() => localStorage.setItem("applications", JSON.stringify(applications)), [applications]);
 
   useEffect(() => {
+    // --- 1. Initialize Default Manager (with all required profile fields) ---
     const managers = JSON.parse(localStorage.getItem("managers")) || [];
     if (!managers.some((m) => m.email === "manager@example.com")) {
-      managers.push({ name: "Default Manager", email: "manager@example.com", password: "123456", phone: "", role: "manager" });
+      managers.push({
+        name: "Default Manager",
+        firstName: "Default",
+        lastName: "Manager",
+        email: "manager@example.com",
+        password: "123456",
+        phone: "",
+        address: "123 Management Way",
+        tags: "Event Planning, Leadership",
+        role: "manager"
+      });
       localStorage.setItem("managers", JSON.stringify(managers));
     }
 
+    // Initialize sample events if none exist
     const storedEvents = JSON.parse(localStorage.getItem("events")) || [];
     if (storedEvents.length === 0) {
       const sample = [
@@ -37,7 +49,7 @@ export default function VolunteerApp() {
     const managers = JSON.parse(localStorage.getItem("managers")) || [];
 
     const foundVolunteer = volunteers.find(
-      (v) => (v.email === identifier || v.phone === identifier || v.name === identifier) && v.password === password
+        (v) => (v.email === identifier || v.phone === identifier || v.name === identifier) && v.password === password
     );
     if (foundVolunteer) {
       setCurrentUser({ ...foundVolunteer, role: "volunteer" });
@@ -46,7 +58,7 @@ export default function VolunteerApp() {
     }
 
     const foundManager = managers.find(
-      (m) => (m.email === identifier || m.phone === identifier || m.name === identifier) && m.password === password
+        (m) => (m.email === identifier || m.phone === identifier || m.name === identifier) && m.password === password
     );
     if (foundManager) {
       setCurrentUser({ ...foundManager, role: "manager" });
@@ -63,7 +75,16 @@ export default function VolunteerApp() {
 
     if (users.some((u) => u.email === user.email)) return alert("Email already used");
 
-    users.push(user);
+    // --- 2. Initialize New Profile Fields on Signup ---
+    const newUser = {
+      ...user,
+      firstName: user.name.split(' ')[0] || '',
+      lastName: user.name.split(' ').slice(1).join(' ') || '',
+      address: "",
+      tags: "",
+    };
+
+    users.push(newUser);
     localStorage.setItem(key, JSON.stringify(users));
     alert(`${role} created. Please log in.`);
     setScreen("login");
@@ -83,15 +104,34 @@ export default function VolunteerApp() {
     setApplications(applications.filter(a => a.eventId !== eventId));
   };
 
+  const handleEndRecruiting = (eventId) => {
+    setEvents(events.map(e => e.id === eventId ? { ...e, recruiting: false } : e));
+    alert("Recruiting ended for this event.");
+  };
+
   const handleApply = (eventObj) => {
     if (!currentUser || currentUser.role !== "volunteer") return alert("Log in as a volunteer to apply");
 
     const exists = applications.find((a) => a.eventId === eventObj.id && a.applicant === currentUser.email);
     if (exists && exists.status === "pending") return alert("You already have a pending application");
 
+    if (!eventObj.recruiting) return alert("Recruiting has ended for this event");
+
     const organizer = eventObj.createdBy || null;
     const filtered = applications.filter((a) => !(a.eventId === eventObj.id && a.applicant === currentUser.email));
-    setApplications([...filtered, { eventId: eventObj.id, title: eventObj.title, status: "pending", volunteerType: currentUser.type, applicant: currentUser.email, organizer }]);
+
+    // Adding dateApplied for use in history display
+    const applicationDate = new Date().toISOString();
+
+    setApplications([...filtered, {
+      eventId: eventObj.id,
+      title: eventObj.title,
+      status: "pending",
+      volunteerType: currentUser.type,
+      applicant: currentUser.email,
+      organizer,
+      dateApplied: applicationDate // Added for history tracking
+    }]);
     alert("Applied — waiting for approval");
   };
 
@@ -100,7 +140,17 @@ export default function VolunteerApp() {
   };
 
   const handleUpdateUser = (updatedUser) => {
+    // 1. Update the current user state
     setCurrentUser(updatedUser);
+
+    // 2. Update the user in Local Storage for persistence
+    const key = updatedUser.role === "manager" ? "managers" : "volunteers";
+    const users = JSON.parse(localStorage.getItem(key)) || [];
+
+    const updatedUsers = users.map((u) =>
+        u.email === updatedUser.email ? updatedUser : u
+    );
+    localStorage.setItem(key, JSON.stringify(updatedUsers));
   };
 
   const logout = () => {
@@ -109,35 +159,53 @@ export default function VolunteerApp() {
   };
 
   if (screen === "login") return <Login onLogin={handleLogin} onNavigate={setScreen} />;
-  if (screen === "profile") return <Profile currentUser={currentUser} onNavigate={setScreen} onUpdateUser={handleUpdateUser} />;
-  if (screen === "signup") return <SignupPage onSignup={handleSignup} onNavigate={setScreen} />;
 
-  if (screen === "volunteer") {
+  // --- 3. PASS APPLICATIONS PROP TO PROFILE ---
+  if (screen === "profile") {
     return (
-      <VolunteerDashboard 
-        currentUser={currentUser} 
-        events={events} 
-        applications={applications} 
-        onApply={handleApply} 
-        onLogout={logout} 
-        onNavigate={setScreen} 
-      />
+        <Profile
+            currentUser={currentUser}
+            onNavigate={setScreen}
+            onUpdateUser={handleUpdateUser}
+            applications={applications} // <--- NEW: required for Volunteer History
+        />
     );
   }
 
+  if (screen === "signup") return <SignupPage onSignup={handleSignup} onNavigate={setScreen} />;
+
+   if (screen === "volunteer") {
+      // Only show events that are recruiting or where volunteer is accepted
+      const visibleEvents = events.filter(
+        e => e.recruiting || applications.some(a => a.eventId === e.id && a.applicant === currentUser.email && a.status === "accepted")
+      );
+  
+      return (
+        <VolunteerDashboard
+          currentUser={currentUser}
+          events={visibleEvents}
+          applications={applications}
+          onApply={handleApply}
+          onLogout={logout}
+          onNavigate={setScreen}
+        />
+      );
+    }
+
   if (screen === "manager") {
     return (
-      <ManagerDashboard 
-        currentUser={currentUser} 
-        events={events} 
-        applications={applications} 
-        onCreateEvent={handleCreateEvent} 
-        onUpdateEvent={handleUpdateEvent}
-        onDeleteEvent={handleDeleteEvent}
-        onUpdateStatus={handleUpdateStatus} 
-        onLogout={logout} 
-        onNavigate={setScreen} 
-      />
+        <ManagerDashboard
+            currentUser={currentUser}
+            events={events}
+            applications={applications}
+            onCreateEvent={handleCreateEvent}
+            onUpdateEvent={handleUpdateEvent}
+            onDeleteEvent={handleDeleteEvent}
+            onUpdateStatus={handleUpdateStatus}
+            onEndRecruiting={handleEndRecruiting}
+            onLogout={logout}
+            onNavigate={setScreen}
+        />
     );
   }
 
